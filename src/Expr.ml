@@ -69,10 +69,12 @@ let _ =
    Takes a state and an expression, and returns the value of the expression in 
    the given state.
 
-let eval = failwith "Not implemented yet" *)
+let eval = failwith "Not implemented yet" 
+*)
 
 let rec eval state expr = match expr with
     | Const const -> const
     | Var var -> state var
     | Binop (op, left, right) -> (operator op) (eval state left) (eval state right);;
+    
                     
