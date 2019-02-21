@@ -21,6 +21,7 @@ open GT
     *, /, %              --- multiplication, division, reminder
 *)
 
+
 (* State: a partial map from variables to integer values. *)
 type state = string -> int
 
