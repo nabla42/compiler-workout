@@ -47,7 +47,7 @@ let eval _ = failwith "Not yet implemented" *)
 
    Takes a program, an input stream, and returns an output stream this program calculates
 *)
-let run p i = let (_, (_, _, o)) = eval ([], (Language.Expr.empty, i, [])) p in o
+let run p i = let (_, (_, _, o)) = eval ([], (Expr.empty, i, [])) p in o
 
 (* Stack machine compiler
 
@@ -55,16 +55,16 @@ let run p i = let (_, (_, _, o)) = eval ([], (Language.Expr.empty, i, [])) p in 
 
    Takes a program in the source language and returns an equivalent program for the
    stack machine
+*)
 
-let compile _ = failwith "Not yet implemented" *)
-
-	let rec compile_expr c_e = match c_e with
-		| Language.Expr.Const const -> [CONST const]
-		| Language.Expr.Var var -> [LD var]
-		| Language.Expr.Binop (op, left, right) -> (compile_expr left)@(compile_expr right)@[BINOP op]
-
-	let rec compile stmt = match stmt with
-		| Language.Stmt.Read var -> [READ; ST var]
-		| Language.Stmt.Write expr -> (compile_expr expr) @ [WRITE]
-		| Language.Stmt.Assign (var, expr)   -> (compile_expr expr) @ [ST var]
-		| Language.Stmt.Seq (s1, s2) -> (compile s1) @ (compile s2);;
+let rec compile =
+  let rec expr = function
+  | Expr.Var   x          -> [LD x]
+  | Expr.Const n          -> [CONST n]
+  | Expr.Binop (op, x, y) -> expr x @ expr y @ [BINOP op]
+  in
+  function
+  | Stmt.Seq (s1, s2)  -> compile s1 @ compile s2
+  | Stmt.Read x        -> [READ; ST x]
+  | Stmt.Write e       -> expr e @ [WRITE]
+  | Stmt.Assign (x, e) -> expr e @ [ST x]
