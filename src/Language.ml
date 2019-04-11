@@ -6,7 +6,37 @@ open List
 
 (* Opening a library for combinator-based syntax analysis *)
 open Ostap.Combinators
-       
+
+(* States *)
+module State =
+  struct
+                                                                
+    (* State: global state, local state, scope variables *)
+    type t = {g : string -> int; l : string -> int; scope : string list}
+
+    (* Empty state *)
+    let empty =
+      let e x = failwith (Printf.sprintf "Undefined variable: %s" x) in
+      {g = e; l = e; scope = []}
+
+    (* Update: non-destructively "modifies" the state s by binding the variable x 
+       to value v and returns the new state w.r.t. a scope
+    *)
+    let update x v s =
+      let u x v s = fun y -> if x = y then v else s y in
+      if List.mem x s.scope then {s with l = u x v s.l} else {s with g = u x v s.g}
+
+    (* Evals a variable in a state w.r.t. a scope *)
+    let eval s x = (if List.mem x s.scope then s.l else s.g) x
+
+    (* Creates a new scope, based on a given state *)
+    let push_scope st xs = {empty with g = st.g; scope = xs}
+
+    (* Drops a scope *)
+    let drop_scope st st' = {st' with g = st.g}
+
+  end
+    
 (* Simple expressions: syntax and semantics *)
 module Expr =
   struct
@@ -26,26 +56,14 @@ module Expr =
         +, -                 --- addition, subtraction
         *, /, %              --- multiplication, division, reminder
     *)
-                                                            
-    (* State: a partial map from variables to integer values. *)
-    type state = string -> int 
-
-    (* Empty state: maps every variable into nothing. *)
-    let empty = fun x -> failwith (Printf.sprintf "Undefined variable %s" x)
-
-    (* Update: non-destructively "modifies" the state s by binding the variable x 
-      to value v and returns the new state.
-    *)
-    let update x v s = fun y -> if x = y then v else s y
-
+      
     (* Expression evaluator
 
           val eval : state -> t -> int
  
        Takes a state and an expression, and returns the value of the expression in 
        the given state.
-   
-    let eval _ = failwith "Not implemented yet" *)
+   *)
     
     let i2b i = i != 0
     let b2i b = if b then 1 else 0
@@ -69,8 +87,9 @@ module Expr =
 
 	let rec eval state expr = match expr with
 		| Const const -> const
-		| Var var -> state var
+		| Var var -> State.eval state var
 		| Binop (op,left, right) -> (operator op) (eval state left) (eval state right)
+    
 
     (* Expression parser. You can use the following terminals:
 
@@ -79,25 +98,28 @@ module Expr =
                                                                                                                   
     *)
 
-    let parse_bin op = ostap(- $(op)), (fun x y -> Binop (op, x, y))
-    
-    ostap (
-      expr:
-		!(Ostap.Util.expr
-           (fun x -> x)
-           (Array.map (fun (a, ops) -> a, List.map parse_bin ops)
-           [|
-             `Lefta, ["!!"];
-             `Lefta, ["&&"];
-             `Nona, ["<="; "<"; ">="; ">"; "=="; "!="];
-             `Lefta, ["+";"-"];
-             `Lefta, ["*"; "/"; "%"];             
-           |])
-           primary
-         );
+    ostap (                                      
+      parse:
+	  !(Ostap.Util.expr 
+             (fun x -> x)
+	     (Array.map (fun (a, s) -> a, 
+                           List.map  (fun s -> ostap(- $(s)), (fun x y -> Binop (s, x, y))) s
+                        ) 
+              [|                
+		`Lefta, ["!!"];
+		`Lefta, ["&&"];
+		`Nona , ["=="; "!="; "<="; "<"; ">="; ">"];
+		`Lefta, ["+" ; "-"];
+		`Lefta, ["*" ; "/"; "%"];
+              |] 
+	     )
+	     primary);
       
-      primary: const:DECIMAL {Const const} | var:IDENT {Var var} | - "(" expr -")"
-      )
+      primary:
+        n:DECIMAL {Const n}
+      | x:IDENT   {Var x}
+      | -"(" parse -")"
+    )
     
   end
                     
@@ -114,90 +136,92 @@ module Stmt =
     (* empty statement                  *) | Skip
     (* conditional                      *) | If     of Expr.t * t * t
     (* loop with a pre-condition        *) | While  of Expr.t * t
-	(* loop with a post-condition       *) | RepeatUntil of t * Expr.t with show
+	(* loop with a post-condition       *) | Repeat of t * Expr.t 
+	(* call a procedure                 *) | Call   of string * Expr.t list with show
     
 
     (* The type of configuration: a state, an input stream, an output stream *)
-    type config = Expr.state * int list * int list 
+    type config = State.t * int list * int list 
 
     (* Statement evaluator
-         val eval : config -> t -> config
-       Takes a configuration and a statement, and returns another configuration
+         val eval : env -> config -> t -> config
+       Takes an environment, a configuration and a statement, and returns another configuration. The 
+       environment supplies the following method
+           method definition : string -> (string list, string list, t)
+       which returns a list of formal parameters and a body for given definition
+    *)
     
-    let eval _ = failwith "Not implemented yet" *)
-    
-   (* let rec eval (state, input, output) st = match st with
-		| Assign (var, expr) 		-> (Expr.update var (Expr.eval state expr) state, input, output)
-		| Write expr 				-> (state, input, output @ [Expr.eval state expr])
-		| Read var 					-> (Expr.update var (List.hd input) state, List.tl input, output)
-		| Seq (s1, s2) 				-> eval(eval(state, input, output)s1)s2
-		| Skip 						-> (state, input, output)
-		| If (expr, thenSt, elSt) 	-> eval (state, input, output) (if Expr.i2b (Expr.eval state expr) then thenSt else elSt)
-		| While (expr, whSt) 		-> if Expr.i2b (Expr.eval state expr) then eval (eval (state, input, output) whSt) st else (state, input, output)
-		| RepeatUtil (ruSt, expr) 	-> let (stateN, inputN, outputN) = eval (state, input, output) ruSt in
-		if not (Expr.i2b (Expr.eval stateN expr)) then eval (stateN, inputN, outputN) st else (stateN, inputN, outputN);;
-*)
-
-let rec eval cfg stmt: config =
-        let (s, i, o) = cfg in
-        match stmt with
-            | Read x -> (match i with
-                | z :: i_rest -> (Expr.update x z s, i_rest, o)
-                | _           -> failwith "Input read fail")
-            | Write   e             -> (s, i, o @ [Expr.eval s e])
-            | Assign (x, e)         -> (Expr.update x (Expr.eval s e) s, i, o)
-            | Seq    (s1, s2) -> eval (eval cfg s1) s2
-            | Skip                              -> (s, i, o)
-            | If (e, thenStmt, elseStmt)        -> eval (s, i, o) (if Expr.i2b (Expr.eval s e) then thenStmt else elseStmt)
-            | While (e, wStmt)                  -> if Expr.i2b (Expr.eval s e) then eval (eval (s, i, o) wStmt) stmt else (s, i, o)
-            | RepeatUntil (ruStmt, e)           -> let (sNew, iNew, oNew) = eval (s, i, o) ruStmt in
-            if not (Expr.i2b (Expr.eval sNew e)) then eval (sNew, iNew, oNew) stmt else (sNew, iNew, oNew);;
-    (* Statement parser *)
+    let rec eval env (st, input, output) op =
+         match op with
+        | Read    v       -> (State.update v (List.hd input) st, List.tl input, output)
+        | Write   e       -> (st, input, output @ [Expr.eval st e])
+        | Assign (v, e)   -> (State.update v (Expr.eval st e) st, input, output)
+        | If (e1, e2, e3) -> if Expr.i2b (Expr.eval st e1) then eval env (st, input, output) e2 else eval env (st, input, output) e3
+        | While (e1, e2)  -> if Expr.i2b (Expr.eval st e1) then eval env (eval env (st, input, output) e2) op else (st, input, output)
+        | Seq    (e1, e2) -> eval env (eval env (st, input, output) e1) e2
+        | Skip            -> (st, input, output)
+        | Repeat (e1, e2)  ->
+            let (st, input, output) = eval env (st, input, output) e1 in
+            let r = Expr.eval st e2 in
+            if Expr.i2b (r) then (st, input, output) else eval env (st, input, output) op
+        | Call (name, args) ->
+            let (arg_names, locals, body) = env#definition name in
+            let args = List.combine arg_names (List.map (Expr.eval st) args) in
+            let state = State.push_scope st (arg_names @ locals) in
+            let fun_env_w_args = List.fold_left (fun st (name, value) -> State.update name value st) state args in
+            let (new_s, input, output) = eval env (fun_env_w_args,input, output) body in
+            (State.drop_scope new_s st, input, output)
 
     (* Statement parser *)
-     ostap (
-      simple:
-        "read" "(" x:IDENT ")"         {Read x}
-        | "write" "(" e:!(Expr.expr) ")" {Write e}
-        | x:IDENT ":=" e:!(Expr.expr)    {Assign (x, e)};
-      ifStmt:
-        "if" e:!(Expr.expr) "then" thenBody:parse
-      elifBranches: (%"elif" elifE:!(Expr.expr) %"then" elifBody:!(parse))*
-      elseBranch: (%"else" elseBody:!(parse))?
-        "fi" {
-      	    let elseBranch' = match elseBranch with
-      	        | Some x -> x
-                | None   -> Skip in
-      	            let expandedElseBody = List.fold_right (fun (e', body') else' -> If (e', body', else')) elifBranches elseBranch' in
-      	            If (e, thenBody, expandedElseBody)
-      	     };
-      whileStmt:
-        "while" e:!(Expr.expr) "do" body:parse "od" {While (e, body)};
-      forStmt:
-        "for" initStmt:stmt "," whileCond:!(Expr.expr) "," forStmt:stmt
-        "do" body:parse "od" {Seq (initStmt, While (whileCond, Seq (body, forStmt)))};
-      repeatUntilStmt:
-        "repeat" body:parse "until" e:!(Expr.expr) {RepeatUntil (body, e)};
-      control:
-        ifStmt
-        | whileStmt
-        | forStmt
-      	| repeatUntilStmt
-      	| "skip" {Skip};
-      stmt:
-        simple
-        | control;
+     ostap (                                      
+      line:
+          "read" "(" x:IDENT ")"         {Read x}
+        | "write" "(" e:!(Expr.parse) ")" {Write e}
+        | x:IDENT ":=" e:!(Expr.parse)    {Assign (x, e)}
+        | "if" e1:!(Expr.parse) "then" e2:parse "else" e3:parse "fi" {If (e1, e2, e3)}
+        | "if" e1:!(Expr.parse) "then" e2:parse "fi" {If (e1, e2, Skip)}
+        | "if" e1:!(Expr.parse) "then" e2:parse e3:elif {If (e1, e2, e3)}
+        | "skip" {Skip}
+        | "while" e1:!(Expr.parse) "do" e2:parse "od" {While (e1, e2)}
+        | "repeat" e1:parse "until" e2:!(Expr.parse) {Repeat  (e1, e2)}
+        | "for" e1:parse "," e2:!(Expr.parse) "," e3:parse "do" s:parse "od" {Seq (e1, While (e2, Seq(s, e3)))}
+        | name:IDENT "(" args:(!(Expr.parse))* ")" {Call (name, args)};
+
       parse:
-        stmt1:stmt ";" rest:parse {Seq (stmt1, rest)}
-        | stmt
+          l:line ";" rest:parse {Seq (l, rest)} | line;
+
+      elif:
+          "elif" e1:!(Expr.parse) "then" e2:parse "else" e3:parse "fi" {If (e1, e2, e3)}
+        | "elif" e1:!(Expr.parse) "then" e2:parse "fi" {If (e1, e2, Skip)}
+        | "elif" e1:!(Expr.parse) "then" e2:parse e3:elif {If (e1, e2, e3)}
     )
       
   end
 
+
+(* Function and procedure definitions *)
+module Definition =
+  struct
+
+    (* The type for a definition: name, argument list, local variables, body *)
+    type t = string * (string list * string list * Stmt.t)
+
+    ostap (                                      
+      parse: "fun" name:IDENT "(" args:(IDENT)* ")" local:(%"local" (IDENT)*)? "{" body:!(Stmt.parse) "}"
+        {
+            let local = match local with
+            | Some x -> x
+            | _ -> [] in
+            name, (args, local, body)
+        }
+    )
+
+  end
+    
 (* The top-level definitions *)
 
-(* The top-level syntax category is statement *)
-type t = Stmt.t    
+(* The top-level syntax category is a pair of definition list and statement (program body) *)
+type t = Definition.t list * Stmt.t    
 
 (* Top-level evaluator
 
@@ -205,8 +229,11 @@ type t = Stmt.t
 
    Takes a program and its input stream, and returns the output stream
 *)
-let eval p i =
-  let _, _, o = Stmt.eval (Expr.empty, i, []) p in o
+
+let eval (defs, body) i =
+  let module M = Map.Make (String) in
+  let m        = List.fold_left (fun m ((name, _) as def) -> M.add name def m) M.empty defs in  
+  let _, _, o  = Stmt.eval (object method definition f = snd @@ M.find f m end) (State.empty, i, []) body in o
 
 (* Top-level parser *)
-let parse = Stmt.parse                                                     
+let parse = ostap (!(Definition.parse)* !(Stmt.parse))
