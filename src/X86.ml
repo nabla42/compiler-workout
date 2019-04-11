@@ -76,7 +76,6 @@ let show instr =
   | Jmp    l           -> Printf.sprintf "\tjmp\t%s" l
   | CJmp  (s , l)      -> Printf.sprintf "\tj%s\t%s" s l
 
-
 (* Opening stack machine to use instructions without fully qualified names *)
 open SM
 
@@ -177,6 +176,7 @@ class env =
     method push y = {< stack = y::stack >}
 
     (* pops one operand from the symbolic stack *)
+
     method pop  = let x::stack'    = stack in x,    {< stack = stack' >}
 
     (* pops two operands from the symbolic stack *)
