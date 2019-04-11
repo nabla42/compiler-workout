@@ -91,6 +91,7 @@ module Expr =
 		| Binop (op,left, right) -> (operator op) (eval state left) (eval state right)
     
 
+
     (* Expression parser. You can use the following terminals:
 
          IDENT   --- a non-empty identifier a-zA-Z[a-zA-Z0-9_]* as a string
@@ -136,10 +137,8 @@ module Stmt =
     (* empty statement                  *) | Skip
     (* conditional                      *) | If     of Expr.t * t * t
     (* loop with a pre-condition        *) | While  of Expr.t * t
-	(* loop with a post-condition       *) | Repeat of t * Expr.t 
-	(* call a procedure                 *) | Call   of string * Expr.t list with show
-    
-
+    (* loop with a post-condition       *) | Repeat of t * Expr.t
+    (* call a procedure                 *) | Call   of string * Expr.t list with show                                                                   
     (* The type of configuration: a state, an input stream, an output stream *)
     type config = State.t * int list * int list 
 
@@ -197,7 +196,6 @@ module Stmt =
     )
       
   end
-
 
 (* Function and procedure definitions *)
 module Definition =

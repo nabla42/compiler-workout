@@ -145,6 +145,7 @@ let get_operation_suf op = match op with
             | CJMP (cj, l) -> let space, env = env#pop in env, [Binop ("cmp", L 0, space); CJmp (cj, l)]
                 in let env, asm' = compile env code' in env, asm @ asm'
 
+
 (* A set of strings *)           
 module S = Set.Make (String)
 
@@ -165,7 +166,7 @@ class env =
 	| []                            -> ebx     , 0
 	| (S n)::_                      -> S (n+1) , n+1
 	| (R n)::_ when n < num_of_regs -> R (n+1) , stack_slots
-			| (M _)::s                      -> allocate' s
+        | (M _)::s                      -> allocate' s
 	| _                             -> S 0     , 1
 	in
 	allocate' stack
